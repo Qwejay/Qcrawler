@@ -1,0 +1,24 @@
+database:
+  host: "8.138.81.47"
+  port: 3306
+  user: "QCrawler"
+  password: "12345678Qwe"
+  db_name: "qcrawler"
+  charset: "utf8mb4"
+
+websites:
+  - name: "dljy"
+    url: "http://dl.sdedu.net/tzgg"
+    selector: "ul.list-news li"
+    
+  - name: "gdjyt"
+    url: "https://edu.gd.gov.cn/zwgknew/gsgg"
+    selector: ".list li"
+
+  - name: "fsjy_gg"
+    url: "https://edu.foshan.gov.cn/gg/other/"
+    selector: ".list li"
+
+  - name: "fsjy_zhaopin"
+    url: "https://edu.foshan.gov.cn/gg/zhaopinxinxi/"
+    selector: ".list li"
