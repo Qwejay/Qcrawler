@@ -12,6 +12,7 @@ import logging
 from models import Database
 import warnings
 import pymysql
+import httpx
 
 # 禁用MySQL的重复条目警告
 warnings.filterwarnings('ignore', category=pymysql.Warning)
@@ -21,6 +22,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# 关闭httpx详细日志，只显示WARNING及以上
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class UniversalCrawler:
     def __init__(self, url: str, selector: str = None, exclude=None, headers: Dict = None):
@@ -245,16 +249,43 @@ class CrawlerManager:
         self.config_file = config_file
         self.config = None
         self.db = None
+        self.bark_url = None
+        self.bark_group = None
 
     def load_config(self):
         """加载配置文件"""
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.config = yaml.safe_load(f)
+            # 读取bark配置
+            bark_conf = self.config.get('bark')
+            if bark_conf:
+                self.bark_url = bark_conf.get('url')
+                self.bark_group = bark_conf.get('group')
             logger.info("配置文件加载成功")
         except Exception as e:
             logger.error(f"加载配置文件失败: {str(e)}")
             raise
+
+    async def bark_push(self, title, url, date, site_name, site_desc=None):
+        """推送到Bark"""
+        if not self.bark_url:
+            return
+        msg = f"【{site_name}】{title}\n{url}"
+        if date:
+            msg += f"\n日期: {date}"
+        payload = {
+            "title": f"{site_desc or site_name}",
+            "body": msg,
+        }
+        if self.bark_group:
+            payload["group"] = self.bark_group
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.get(self.bark_url, params=payload, timeout=10)
+            logger.info(f"Bark推送成功: {title}")
+        except Exception as e:
+            logger.warning(f"Bark推送失败: {str(e)}")
 
     async def init_database(self):
         """初始化数据库连接"""
@@ -281,8 +312,18 @@ class CrawlerManager:
             
             if results:
                 logger.info(f"{site['name']} {len(results)} 条数据")
-                # 保存到数据库
+                # 保存前后对比，推送新增
+                before = await self.db.get_all_urls(site['name']) if hasattr(self.db, 'get_all_urls') else set()
                 await self.db.save_articles(site['name'], results)
+                after = await self.db.get_all_urls(site['name']) if hasattr(self.db, 'get_all_urls') else set()
+                new_urls = set()
+                if before and after:
+                    new_urls = set(after) - set(before)
+                else:
+                    new_urls = set([item['url'] for item in results])
+                for item in results:
+                    if item['url'] in new_urls:
+                        await self.bark_push(item['title'], item['url'], item.get('date'), site['name'], site.get('desc'))
             else:
                 logger.warning(f"网站 {site['name']} 未爬取到数据")
 

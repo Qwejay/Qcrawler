@@ -125,4 +125,17 @@ class Database:
         if self.pool:
             self.pool.close()
             await self.pool.wait_closed()
-            logger.info("数据库连接池已关闭") 
+            logger.info("数据库连接池已关闭")
+
+    async def get_all_urls(self, table_name: str):
+        """获取指定表的所有url集合"""
+        urls = set()
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(f"SELECT url FROM {table_name}")
+                    rows = await cursor.fetchall()
+                    urls = set(row[0] for row in rows)
+        except Exception as e:
+            logger.error(f"获取表 {table_name} 所有url失败: {str(e)}")
+        return urls 

@@ -6,23 +6,37 @@ database:
   db_name: "qcrawler"
   charset: "utf8mb4"
 
+bark:
+  url: "https://api.day.app/NivXhH6cYwLhaJ8BdZKzC6/"
+  group: "QCrawler"
+
 websites:
   - name: "dljy"
+    desc: "大良教育局"
     url: "http://dl.sdedu.net/tzgg"
     selector: "ul.list-news li"
-    
+
   - name: "gdjyt"
+    desc: "广东省教育厅"
     url: "https://edu.gd.gov.cn/zwgknew/gsgg"
     selector: ".list li"
 
   - name: "fsjy_gg"
+    desc: "佛山市教育局公告"
     url: "https://edu.foshan.gov.cn/gg/other/"
     selector: ".list li"
 
   - name: "fsjy_zhaopin"
+    desc: "佛山市教育局招聘"
     url: "https://edu.foshan.gov.cn/gg/zhaopinxinxi/"
     selector: ".list li"
 
   - name: "nhjy_gg"
+    desc: "南海区教育局公告"
     url: "http://www.nhedu.net/zx/tzgg/"
     selector: ".in-common-list li"
+
+  - name: "sdjy_gg"
+    desc: "顺德区教育局公告"
+    url: "https://www.shunde.gov.cn/sdqjyj/tzgg/gggs/"
+    selector: ".list_ulBox li"
