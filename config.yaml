@@ -22,3 +22,7 @@ websites:
   - name: "fsjy_zhaopin"
     url: "https://edu.foshan.gov.cn/gg/zhaopinxinxi/"
     selector: ".list li"
+
+  - name: "nhjy_gg"
+    url: "http://www.nhedu.net/zx/tzgg/"
+    selector: ".in-common-list li"

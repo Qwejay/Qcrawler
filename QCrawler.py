@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-通用网页爬虫 - 自动检测标题、URL和日期
-"""
 import asyncio
 import re
 from datetime import datetime
@@ -212,12 +209,12 @@ class UniversalCrawler:
                     items.append((title, url, date))
 
             if items:
-                logger.info(f"网站 {self.url}: 成功提取 {len(items)} 条数据")
+                pass
             else:
-                logger.warning(f"网站 {self.url}: 未能提取到有效数据")
+                logger.warning(f"{self.url}: 未能提取到有效数据")
 
         except Exception as e:
-            logger.error(f"网站 {self.url}: 提取内容时出错 - {str(e)}")
+            logger.error(f"{self.url}: 提取内容时出错 - {str(e)}")
 
         return items
 
@@ -283,7 +280,7 @@ class CrawlerManager:
             results = await crawler.crawl()
             
             if results:
-                logger.info(f"成功爬取 {site['name']} 的 {len(results)} 条数据")
+                logger.info(f"{site['name']} {len(results)} 条数据")
                 # 保存到数据库
                 await self.db.save_articles(site['name'], results)
             else:

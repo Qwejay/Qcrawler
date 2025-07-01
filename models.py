@@ -115,7 +115,7 @@ class Database:
                     await cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
                     after_count = (await cursor.fetchone())[0]
                     new_count = after_count - before_count
-                    logger.info(f"网站 {table_name}: 新增 {new_count} 条数据")
+                    logger.info(f"{table_name}: 新增 {new_count} 条数据")
         except Exception as e:
             logger.error(f"保存数据到表 {table_name} 失败: {str(e)}")
             raise
