@@ -13,6 +13,7 @@ from models import Database
 import warnings
 import pymysql
 import httpx
+from urllib.parse import urljoin, urlparse, quote, unquote
 
 # 禁用MySQL的重复条目警告
 warnings.filterwarnings('ignore', category=pymysql.Warning)
@@ -27,10 +28,13 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class UniversalCrawler:
-    def __init__(self, url: str, selector: str = None, exclude=None, headers: Dict = None):
+    def __init__(self, url: str, selector: str = None, exclude=None, headers: Dict = None, type_: str = None, json_path: str = None, field_map: dict = None):
         self.url = url
         self.selector = selector
         self.exclude = exclude if exclude else []
+        self.type_ = type_
+        self.json_path = json_path
+        self.field_map = field_map or {}
         self.headers = headers or {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -39,11 +43,18 @@ class UniversalCrawler:
 
     async def fetch_page(self) -> str:
         """获取网页内容"""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.url, headers=self.headers) as response:
-                if response.status != 200:
-                    raise Exception(f"HTTP {response.status}: {self.url}")
-                return await response.text()
+        if self.type_ == "json":
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(self.url, headers=self.headers, timeout=10)
+                if resp.status_code != 200:
+                    raise Exception(f"HTTP {resp.status_code}: {self.url}")
+                return resp.text
+        else:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.url, headers=self.headers) as response:
+                    if response.status != 200:
+                        raise Exception(f"HTTP {response.status}: {self.url}")
+                    return await response.text()
 
     def _is_likely_title(self, text: str) -> bool:
         """判断文本是否可能是标题"""
@@ -82,21 +93,44 @@ class UniversalCrawler:
         return False
 
     def _normalize_url(self, url: str) -> str:
-        """标准化URL"""
+        """智能检测和修复URL"""
         if not url:
             return ""
-        
+
+        url = url.strip()
+        # 处理空格和特殊字符
+        url = unquote(url)
+        url = url.replace(' ', '%20')
+
+        # 如果是javascript或mailto等无效链接，直接返回空
+        if url.lower().startswith(('javascript:', 'mailto:', '#')):
+            return ""
+
         # 如果是相对路径，转换为绝对路径
-        if url.startswith('/'):
-            from urllib.parse import urlparse
-            parsed = urlparse(self.url)
-            base_url = f"{parsed.scheme}://{parsed.netloc}"
-            return base_url + url
-        
-        # 如果不是http开头，且不是相对路径，可能是省略了协议
+        if url.startswith('/') or url.startswith('./') or url.startswith('../'):
+            return urljoin(self.url, url)
+
+        # 如果缺少协议，补全
         if not url.startswith(('http://', 'https://')):
-            return f"http://{url}"
-            
+            # 检查是否是类似 www.xxx.com 的格式
+            if re.match(r'^www\\.', url):
+                return 'http://' + url
+            # 其他情况尝试用 urljoin 拼接
+            return urljoin(self.url, url)
+
+        # 检查URL格式是否正确
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            # 尝试用 urljoin 修复
+            fixed_url = urljoin(self.url, url)
+            parsed_fixed = urlparse(fixed_url)
+            if parsed_fixed.scheme and parsed_fixed.netloc:
+                return fixed_url
+            else:
+                return ""
+
+        # 编码非ASCII字符
+        url = quote(url, safe=':/?&=#%')
         return url
 
     def _should_exclude(self, tag) -> bool:
@@ -166,32 +200,27 @@ class UniversalCrawler:
     def _extract_items(self, soup: BeautifulSoup) -> List[Tuple[str, str, str]]:
         """提取页面中的标题、URL和日期"""
         items = []
-        
         try:
             if self.selector:
                 containers = soup.select(self.selector)
             else:
                 containers = soup.find_all(['li', 'div', 'article'])
-            
             if not containers:
                 logger.warning(f"网站 {self.url}: 未找到任何内容")
                 return items
-
             # 排除指定class、id和url的内容
             if self.exclude:
                 containers = [c for c in containers if not self._should_exclude(c)]
-
             for container in containers:
                 title = None
                 url = None
                 date = None
-
                 # 提取链接和标题
                 link = container.find('a')
                 if link:
                     url = link.get('href', '')
+                    url = self._normalize_url(url)
                     title = link.get_text(strip=True)
-
                 # 提取日期
                 date_text = None
                 date_element = container.find(class_=lambda x: x and any(keyword in str(x).lower() for keyword in ['date', 'time', 'pub', '时间', '日期']))
@@ -203,43 +232,78 @@ class UniversalCrawler:
                     date_matches = re.findall(r'\d{4}[-年/]\d{1,2}[-月/]\d{1,2}', text)
                     if date_matches:
                         date_text = date_matches[0]
-
                 if date_text:
                     # 统一日期格式
                     date_text = re.sub(r'[年月]', '-', date_text).replace('日', '')
                     date = date_text.strip('-')
-
                 if title and url:
                     items.append((title, url, date))
-
             if items:
                 pass
             else:
                 logger.warning(f"{self.url}: 未能提取到有效数据")
-
         except Exception as e:
             logger.error(f"{self.url}: 提取内容时出错 - {str(e)}")
-
         return items
 
     async def crawl(self) -> List[Dict]:
         """执行爬取"""
         try:
-            html = await self.fetch_page()
-            soup = BeautifulSoup(html, 'html.parser')
-            
-            items = self._extract_items(soup)
-            
-            results = []
-            for title, url, date in items:
-                results.append({
-                    'title': title,
-                    'url': url,
-                    'date': date
-                })
-            
-            return results
-            
+            if self.type_ == "json":
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(self.url, headers=self.headers, timeout=10)
+                    if resp.status_code != 200:
+                        raise Exception(f"HTTP {resp.status_code}: {self.url}")
+                    data = resp.json() if hasattr(resp, 'json') else resp.json
+                    # 通用json主列表提取
+                    items = data
+                    if self.json_path:
+                        for part in self.json_path.split('.'):
+                            if isinstance(items, dict):
+                                items = items.get(part, [])
+                            else:
+                                logger.warning(f"json_path配置有误，{part}不是dict，实际类型为{type(items)}，内容为{str(items)[:100]}")
+                                break
+                    if not isinstance(items, list):
+                        # 智能兜底：如果是dict且只有一个key且value为list，自动取list
+                        if isinstance(items, dict) and len(items) == 1 and isinstance(list(items.values())[0], list):
+                            items = list(items.values())[0]
+                        else:
+                            logger.error(f"json_path提取后不是list，实际类型为{type(items)}，内容为{str(items)[:200]}")
+                            return []
+                    # 字段映射
+                    title_key = self.field_map.get('title', 'title')
+                    url_key = self.field_map.get('url', 'url')
+                    date_key = self.field_map.get('date', 'date')
+                    date_format = self.field_map.get('date_format')
+                    results = []
+                    for item in items:
+                        title = item.get(title_key)
+                        url = item.get(url_key)
+                        date = item.get(date_key)
+                        if date and date_format == "timestamp":
+                            try:
+                                date = datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d')
+                            except Exception:
+                                pass
+                        results.append({
+                            'title': title,
+                            'url': url,
+                            'date': date
+                        })
+                    return results
+            else:
+                html = await self.fetch_page()
+                soup = BeautifulSoup(html, 'html.parser')
+                items = self._extract_items(soup)
+                results = []
+                for title, url, date in items:
+                    results.append({
+                        'title': title,
+                        'url': url,
+                        'date': date
+                    })
+                return results
         except Exception as e:
             logger.error(f"爬取失败: {str(e)}")
             return []
@@ -306,8 +370,19 @@ class CrawlerManager:
     async def crawl_all(self):
         """爬取所有配置的网站"""
         for site in self.config['websites']:
+            # 新增：根据 enable 字段判断是否启用
+            if not site.get('enable', True):
+                logger.info(f"跳过未启用网站: {site['name']}")
+                continue
             logger.info(f"开始爬取网站: {site['name']}")
-            crawler = UniversalCrawler(site['url'], site.get('selector'), site.get('exclude'))
+            crawler = UniversalCrawler(
+                site['url'],
+                site.get('selector'),
+                site.get('exclude'),
+                type_=site.get('type'),
+                json_path=site.get('json_path'),
+                field_map=site.get('field_map')
+            )
             results = await crawler.crawl()
             
             if results:

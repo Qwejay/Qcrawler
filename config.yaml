@@ -15,28 +15,60 @@ websites:
     desc: "大良教育局"
     url: "http://dl.sdedu.net/tzgg"
     selector: "ul.list-news li"
+    enable: false
 
   - name: "gdjyt"
     desc: "广东省教育厅"
     url: "https://edu.gd.gov.cn/zwgknew/gsgg"
     selector: ".list li"
+    enable: false
 
   - name: "fsjy_gg"
     desc: "佛山市教育局公告"
     url: "https://edu.foshan.gov.cn/gg/other/"
     selector: ".list li"
+    enable: false
 
   - name: "fsjy_zhaopin"
     desc: "佛山市教育局招聘"
     url: "https://edu.foshan.gov.cn/gg/zhaopinxinxi/"
     selector: ".list li"
+    enable: false
 
   - name: "nhjy_gg"
     desc: "南海区教育局公告"
     url: "http://www.nhedu.net/zx/tzgg/"
     selector: ".in-common-list li"
+    enable: false
 
   - name: "sdjy_gg"
     desc: "顺德区教育局公告"
     url: "https://www.shunde.gov.cn/sdqjyj/tzgg/gggs/"
     selector: ".list_ulBox li"
+    enable: false
+
+  - name: "sdjy_zhaopin"
+    desc: "顺德区教育局教师招聘与教师资格"
+    url: "https://www.shunde.gov.cn/sdqjyj/tzgg/jszpyjszg/"
+    selector: ".list_ulBox li"
+    enable: false
+
+  - name: "sdjy_gongkai"
+    desc: "顺德区教育局信息公开"
+    url: "https://www.shunde.gov.cn/fssdjyj/gkmlpt/api/all/0?page=1&sid=757098"
+    type: "json"
+    json_path: "articles"
+    field_map:
+      title: "title"
+      url: "url"
+      date: "date"
+      date_format: "timestamp"
+    enable: false
+
+  - name: "sdjyxx_gg"
+    desc: "顺德教育信息公告"
+    url: "http://www.sdedu.net/"
+    selector: ".article_left li"
+    enable: true
+
+
